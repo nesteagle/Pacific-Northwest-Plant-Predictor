@@ -81,12 +81,9 @@ df_bounded = get_bounded_df()
 # filter for non-null ScientificName cols
 df_bounded = df_bounded[df_bounded["ScientificName"].notna()]
 
-# filter out rare species with less than 100 occurrences total
+# filter out rare species with less than 15 occurrences total
 species_counts = df_bounded["ScientificName"].value_counts()
-species_to_keep = species_counts[species_counts >= 100].index
-
-print("Total species:", df_bounded["ScientificName"].nunique())
-print("Species to keep:", len(species_to_keep))
+species_to_keep = species_counts[species_counts >= 15].index
 
 df_filtered = df_bounded[df_bounded["ScientificName"].isin(species_to_keep)]
 
@@ -160,7 +157,7 @@ def predict(lat, lon):
 
 demo = gr.Interface(
     fn=predict,
-    inputs=[gr.inputs.Number(label="Latitude"), gr.inputs.Number(label="Longitude")],
+    inputs=[gr.Number(label="Latitude"), gr.Number(label="Longitude")],
     outputs="text",
     title="Latitude/Longitude prediction",
 )
