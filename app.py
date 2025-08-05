@@ -153,7 +153,7 @@ def predict_plants(lat, lon, max_distance=0.05, top_k=20):
 
 def predict(lat, lon):
     predictions = predict_plants(lat=lat, lon=lon)
-    return format_prediction(predictions=predictions)
+    return format_predictions(predictions=predictions)
 
 
 def format_predictions(predictions):
