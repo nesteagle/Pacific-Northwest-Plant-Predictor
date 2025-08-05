@@ -120,36 +120,33 @@ df_with_grid = df_filtered.merge(agg, on=["grid_x", "grid_y"], how="left")
 
 
 # distance of 0.1deg -> roughly 7x11km
-def predict_plants(lat, lon, max_distance=0.05):
+def predict_plants(lat, lon, max_distance=0.05, top_k=100):
     indices = tree.query_ball_point([lat, lon], r=max_distance)
-
     if not indices:
         return None
 
     neighbors = labels[indices]
+    neighbor_coords = coords[indices]
 
-    distances = ((coords[indices] - np.array([lat, lon])) ** 2).sum(axis=1) ** 0.5
+    # Compute Euclidean distances and inverse-distance weights
+    deltas = neighbor_coords - np.array([lat, lon])
+    distances = np.linalg.norm(deltas, axis=1)
     weights = 1 / (distances + 1e-6)
 
+    # collect weight by species
     species_weights = defaultdict(float)
     for sp, w in zip(neighbors, weights):
         species_weights[sp] += w
 
+    # sort top_k species by weight
     total_weight = sum(species_weights.values())
-    results = [
-        (species, 100 * weight / total_weight)
-        for species, weight in species_weights.items()
-    ]
+    if total_weight == 0:
+        return None
+
+    results = [(sp, 100 * w / total_weight) for sp, w in species_weights.items()]
     results.sort(key=lambda x: x[1], reverse=True)
 
-    if not results:
-        return "No plants nearby"
-    str_results = [
-        f"{species}, {(100 * weight / total_weight):.2f}%)\n"
-        for species, weight in results
-    ]
-    return str_results
-
+    return results[:top_k]
 
 def predict(lat, lon):
     return predict_plants(lat=lat, lon=lon)
