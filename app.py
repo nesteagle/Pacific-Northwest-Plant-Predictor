@@ -8,10 +8,8 @@ import numpy as np
 from scipy.spatial import KDTree
 from datasets import load_dataset
 
-# Cache file for processed dataframe
 CACHE_FILE = "processed_occurrences.pkl"
 
-# Columns you want to load and process
 usecols = [
     "DecimalLatitude",
     "DecimalLongitude",
@@ -160,5 +158,10 @@ def predict(lat, lon):
     return predict_plants(lat=lat, lon=lon)
 
 
-demo = gr.Interface(fn=predict, inputs="text", outputs="text")
+demo = gr.Interface(
+    fn=predict,
+    inputs=[gr.inputs.Number(label="Latitude"), gr.inputs.Number(label="Longitude")],
+    outputs="text",
+    title="Latitude/Longitude prediction",
+)
 demo.launch()
