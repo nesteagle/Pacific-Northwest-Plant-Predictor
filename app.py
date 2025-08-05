@@ -52,7 +52,7 @@ def get_bounded_df():
         )
 
         # tsv to pandas
-        df = process_dataset(dataset, column_names=usecols)
+        df = process_dataset(dataset, usecols)
 
         df[LAT_COL] = pd.to_numeric(df[LAT_COL], errors="coerce")
         df[LON_COL] = pd.to_numeric(df[LON_COL], errors="coerce")
