@@ -29,9 +29,14 @@ MIN_LAT, MAX_LAT = 40.0, 70
 MIN_LON, MAX_LON = -160.0, -110.0
 
 
-def hf_text_to_df(dataset, column_names):
-    rows = [line.split("\t") for line in dataset["text"] if line.strip()]
-    df = pd.DataFrame(rows, columns=column_names)
+def process_dataset(dataset, usecols):
+    lines = [line for line in dataset["text"] if line.strip()]
+    header = lines[0].split("\t")
+    data_lines = lines[1:]
+    rows = [line.split("\t") for line in data_lines]
+    df_full = pd.DataFrame(rows, columns=header)
+    cols_to_use = [col for col in usecols if col in df_full.columns]
+    df = df_full[cols_to_use].copy()
     return df
 
 
@@ -47,7 +52,7 @@ def get_bounded_df():
         )
 
         # tsv to pandas
-        df = hf_text_to_df(dataset, column_names=usecols)
+        df = process_dataset(dataset, column_names=usecols)
 
         df[LAT_COL] = pd.to_numeric(df[LAT_COL], errors="coerce")
         df[LON_COL] = pd.to_numeric(df[LON_COL], errors="coerce")
