@@ -120,7 +120,7 @@ df_with_grid = df_filtered.merge(agg, on=["grid_x", "grid_y"], how="left")
 
 
 # distance of 0.1deg -> roughly 7x11km
-def predict_plants(lat, lon, max_distance=0.05, top_k=100):
+def predict_plants(lat, lon, max_distance=0.05, top_k=20):
     indices = tree.query_ball_point([lat, lon], r=max_distance)
     if not indices:
         return None
@@ -143,13 +143,27 @@ def predict_plants(lat, lon, max_distance=0.05, top_k=100):
     if total_weight == 0:
         return None
 
-    results = [(sp, 100 * w / total_weight) for sp, w in species_weights.items()]
+    results = [
+        f"{sp}: {(100 * w / total_weight):.2f}%" for sp, w in species_weights.items()
+    ]
     results.sort(key=lambda x: x[1], reverse=True)
 
     return results[:top_k]
 
+
 def predict(lat, lon):
-    return predict_plants(lat=lat, lon=lon)
+    predictions = predict_plants(lat=lat, lon=lon)
+    return format_prediction(predictions=predictions)
+
+
+def format_predictions(predictions):
+    if not predictions:
+        return "No plants found nearby."
+    lines = []
+    for species, prob in predictions:
+        name = species if species.strip() else "(Unknown species)"
+        lines.append(f"{name}: {prob:.2f}%")
+    return "\n".join(lines)
 
 
 demo = gr.Interface(
