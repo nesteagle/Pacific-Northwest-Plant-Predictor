@@ -10,15 +10,13 @@ from datasets import load_dataset
 
 CACHE_FILE = "processed_occurrences.pkl"
 
-usecols = [
+USE_COLS = [
     "DecimalLatitude",
     "DecimalLongitude",
     "ValidLatLng",
     "Family",
     "ScientificName",
     "YearCollected",
-    "MinimumElevationInMeters",
-    "MaximumElevationInMeters",
 ]
 
 LAT_COL = "DecimalLatitude"
@@ -50,21 +48,16 @@ def get_bounded_df():
         )
 
         # tsv to pandas
-        df = process_dataset(dataset, usecols)
+        df = process_dataset(dataset, USE_COLS)
 
         df[LAT_COL] = pd.to_numeric(df[LAT_COL], errors="coerce")
         df[LON_COL] = pd.to_numeric(df[LON_COL], errors="coerce")
-        df["YearCollected"] = pd.to_numeric(df["YearCollected"], errors="coerce")
-        df["MinimumElevationInMeters"] = pd.to_numeric(
-            df["MinimumElevationInMeters"], errors="coerce"
-        )
-        df["MaximumElevationInMeters"] = pd.to_numeric(
-            df["MaximumElevationInMeters"], errors="coerce"
-        )
+        df["ValidLatLng"] = df["ValidLatLng"].astype(str).str.lower().eq("true")
 
-        # Filter on lat/lon bounds and drop rows with missing lat/lon
+        # Filter on lat/lon bounds and drop rows with missing or invalid lat/lon
         df = df[
-            (df[LAT_COL] >= MIN_LAT)
+            (df["ValidLatLng"])
+            & (df[LAT_COL] >= MIN_LAT)
             & (df[LAT_COL] <= MAX_LAT)
             & (df[LON_COL] >= MIN_LON)
             & (df[LON_COL] <= MAX_LON)
@@ -96,12 +89,9 @@ coords = df_filtered[["DecimalLatitude", "DecimalLongitude"]].values
 labels = df_filtered["ScientificName"].values
 tree = KDTree(coords)
 
-GRID_SIZE = 0.01  # in degrees
+GRID_SIZE = 0.01  # in degrees latitude/longitude
 
 df_filtered = df_filtered.copy()
-df_filtered.loc[:, "MeanElevation"] = (
-    df_filtered["MinimumElevationInMeters"] + df_filtered["MaximumElevationInMeters"]
-) / 2
 df_filtered.loc[:, "grid_x"] = (df_filtered["DecimalLongitude"] // GRID_SIZE).astype(
     int
 )
@@ -128,22 +118,25 @@ def predict_plants(lat, lon, max_distance=0.05, top_k=20):
     neighbors = labels[indices]
     neighbor_coords = coords[indices]
 
-    # Compute Euclidean distances and inverse-distance weights
+    # Compute Euclidean distance and inverse-distance weights
     deltas = neighbor_coords - np.array([lat, lon])
     distances = np.linalg.norm(deltas, axis=1)
     weights = 1 / (distances + 1e-6)
 
     # collect weight by species
     species_weights = defaultdict(float)
-    for sp, w in zip(neighbors, weights):
-        species_weights[sp] += w
+    for species, weight in zip(neighbors, weights):
+        species_weights[species] += weight
 
     # sort top_k species by weight
     total_weight = sum(species_weights.values())
     if total_weight == 0:
         return None
 
-    results = [(sp, 100 * w / total_weight) for sp, w in species_weights.items()]
+    results = [
+        (species_name, 100 * weight / total_weight)
+        for species_name, weight in species_weights.items()
+    ]
     results.sort(key=lambda x: x[1], reverse=True)
     return results[:top_k]
 
