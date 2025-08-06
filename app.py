@@ -143,11 +143,8 @@ def predict_plants(lat, lon, max_distance=0.05, top_k=20):
     if total_weight == 0:
         return None
 
-    results = [
-        f"{sp}: {(100 * w / total_weight):.2f}%" for sp, w in species_weights.items()
-    ]
+    results = [(sp, 100 * w / total_weight) for sp, w in species_weights.items()]
     results.sort(key=lambda x: x[1], reverse=True)
-
     return results[:top_k]
 
 
