@@ -1,3 +1,5 @@
+"""Predicts likely plant species at given latitude and longitude coordinates and hosts a Gradio interface"""
+
 import os
 from collections import defaultdict
 from datetime import datetime
@@ -26,6 +28,7 @@ MIN_LON, MAX_LON = -160.0, -110.0
 
 
 def process_dataset(dataset, usecols):
+    """Convert dataset text format to pandas DataFrame."""
     lines = [line for line in dataset["text"] if line.strip()]
     header = lines[0].split("\t")
     data_lines = lines[1:]
@@ -37,6 +40,7 @@ def process_dataset(dataset, usecols):
 
 
 def get_bounded_df():
+    """Load and preprocess herbarium data."""
     if os.path.exists(CACHE_FILE):
         df = pd.read_pickle(CACHE_FILE)
         print("Loaded cached processed data.")
@@ -92,7 +96,9 @@ tree = KDTree(coords)
 GRID_SIZE = 0.01  # in degrees latitude/longitude
 
 df_filtered = df_filtered.copy()
-df_filtered.loc[:, "grid_x"] = (df_filtered["DecimalLongitude"] // GRID_SIZE).astype(int)
+df_filtered.loc[:, "grid_x"] = (df_filtered["DecimalLongitude"] // GRID_SIZE).astype(
+    int
+)
 df_filtered.loc[:, "grid_y"] = (df_filtered["DecimalLatitude"] // GRID_SIZE).astype(int)
 
 agg = (
@@ -109,6 +115,7 @@ df_with_grid = df_filtered.merge(agg, on=["grid_x", "grid_y"], how="left")
 
 # distance of 0.1deg -> roughly 7x11km
 def predict_plants(lat, lon, max_distance=0.05, top_k=20):
+    """Predict plant species likelihood at given coordinates using spatial K-NN."""
     indices = tree.query_ball_point([lat, lon], r=max_distance)
     if not indices:
         return None
@@ -140,11 +147,13 @@ def predict_plants(lat, lon, max_distance=0.05, top_k=20):
 
 
 def predict(lat, lon):
+    """Main prediction interface"""
     predictions = predict_plants(lat=lat, lon=lon)
     return format_predictions(predictions=predictions)
 
 
 def format_predictions(predictions):
+    """Formats predictions for display"""
     if not predictions:
         return "No plants found nearby."
     lines = []
