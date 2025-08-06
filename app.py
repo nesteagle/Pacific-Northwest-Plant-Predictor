@@ -47,7 +47,7 @@ def get_bounded_df():
             split="occurrences",
         )
 
-        # tsv to pandas
+        # process to pandas
         df = process_dataset(dataset, USE_COLS)
 
         df[LAT_COL] = pd.to_numeric(df[LAT_COL], errors="coerce")
@@ -92,9 +92,7 @@ tree = KDTree(coords)
 GRID_SIZE = 0.01  # in degrees latitude/longitude
 
 df_filtered = df_filtered.copy()
-df_filtered.loc[:, "grid_x"] = (df_filtered["DecimalLongitude"] // GRID_SIZE).astype(
-    int
-)
+df_filtered.loc[:, "grid_x"] = (df_filtered["DecimalLongitude"] // GRID_SIZE).astype(int)
 df_filtered.loc[:, "grid_y"] = (df_filtered["DecimalLatitude"] // GRID_SIZE).astype(int)
 
 agg = (
