@@ -149,8 +149,6 @@ def predict_plants(lat, lon, max_distance=0.05, top_k=20):
 
 def predict(lat, lon):
     """Main prediction interface"""
-    if lat is None or lon is None:
-        return "Please select coordinates on the map."
     predictions = predict_plants(lat=lat, lon=lon)
     return format_predictions(predictions=predictions)
 
@@ -166,22 +164,22 @@ def format_predictions(predictions):
     return "\n".join(lines)
 
 
-with open("map.html", "r") as f:
-    leaflet_html = f.read()
+def predict_wrapper(coords):
+    """Wrapper taking a Gradio state and passing it to predict function"""
+    if coords is None:
+        return "Please click on the map."
+    lat, lon = coords
+    return predict(lat=lat, lon=lon)
 
 with gr.Blocks() as demo:
-    gr.HTML(leaflet_html)
+    leaflet_html = open("map.html").read()
 
-    lat_input = gr.Number(visible=False, interactive=True, elem_id="lat_input")
-    lng_input = gr.Number(visible=False, interactive=True, elem_id="lng_input")
+    gr.HTML(leaflet_html) 
 
-    output = gr.Textbox(
-        label="Prediction Output",
-        placeholder="Click on the map to get prediction here...",
-    )
+    coords = gr.State()
 
-    lat_input.input(fn=predict, inputs=[lat_input, lng_input], outputs=output)
-    lng_input.input(fn=predict, inputs=[lat_input, lng_input], outputs=output)
+    output = gr.Textbox(label="Prediction Output", placeholder="Click on the map...")
 
+    coords.change(fn=predict_wrapper, inputs=coords, outputs=output)
 
 demo.launch()

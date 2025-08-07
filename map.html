@@ -32,22 +32,12 @@
     var marker;
 
     function sendCoordinates(lat, lng) {
-        var latInput = document.getElementById('lat_input');
-        var lngInput = document.getElementById('lng_input');
-
-        console.log("sendCoordinates called with", lat, lng);
-        console.log("latitude input: ", latInput, "longitude input: ", lngInput);
-
-        if (!latInput || !lngInput) {
-            console.warn("Hidden inputs not found.");
-            return
-        };
-        latInput.value = lat;
-        lngInput.value = lng;
-        ['input', 'change'].forEach(evtName => {
-            latInput.dispatchEvent(new Event(evtName, { bubbles: true, cancelable: true }));
-            lngInput.dispatchEvent(new Event(evtName, { bubbles: true, cancelable: true }));
-        });
+        if (window.gradioApp) {
+            window.gradioApp().setState([lat, lng]);
+            console.log("Coordinates sent to Gradio state:", lat, lng);
+        } else {
+            console.warn("gradioApp is not available");
+        }
     }
 
 
