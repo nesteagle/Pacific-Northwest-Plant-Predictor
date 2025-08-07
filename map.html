@@ -35,14 +35,21 @@
         var latInput = document.getElementById('lat_input');
         var lngInput = document.getElementById('lng_input');
 
-        if (latInput && lngInput) {
-            latInput.value = lat;
-            lngInput.value = lng;
+        console.log("sendCoordinates called with", lat, lng);
+        console.log("latitude input: ", latInput, "longitude input: ", lngInput);
 
-            latInput.dispatchEvent(new Event('input', { bubbles: true }));
-            lngInput.dispatchEvent(new Event('input', { bubbles: true }));
-        }
+        if (!latInput || !lngInput) {
+            console.warn("Hidden inputs not found.");
+            return
+        };
+        latInput.value = lat;
+        lngInput.value = lng;
+        ['input', 'change'].forEach(evtName => {
+            latInput.dispatchEvent(new Event(evtName, { bubbles: true, cancelable: true }));
+            lngInput.dispatchEvent(new Event(evtName, { bubbles: true, cancelable: true }));
+        });
     }
+
 
     map.on('click', function (e) {
         if (marker) {
