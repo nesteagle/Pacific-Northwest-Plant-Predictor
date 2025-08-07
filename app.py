@@ -148,6 +148,8 @@ def predict_plants(lat, lon, max_distance=0.05, top_k=20):
 
 def predict(lat, lon):
     """Main prediction interface"""
+    if lat is None or lon is None:
+        return "Please select coordinates on the map."
     predictions = predict_plants(lat=lat, lon=lon)
     return format_predictions(predictions=predictions)
 
@@ -163,10 +165,21 @@ def format_predictions(predictions):
     return "\n".join(lines)
 
 
-demo = gr.Interface(
-    fn=predict,
-    inputs=[gr.Number(label="Latitude"), gr.Number(label="Longitude")],
-    outputs="text",
-    title="Latitude/Longitude prediction",
-)
+with open("map.html", "r") as f:
+    leaflet_html = f.read()
+
+with gr.Blocks() as demo:
+    gr.HTML(leaflet_html)
+
+    lat_input = gr.Number(visible=False, interactive=True, elem_id="lat_input")
+    lng_input = gr.Number(visible=False, interactive=True, elem_id="lng_input")
+
+    output = gr.Textbox(
+        label="Prediction Output",
+        placeholder="Click on the map to get prediction here...",
+    )
+
+    lat_input.change(fn=predict, inputs=[lat_input, lng_input], outputs=output)
+    lng_input.change(fn=predict, inputs=[lat_input, lng_input], outputs=output)
+
 demo.launch()

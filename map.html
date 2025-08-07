@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Pacific Northwest Plant Predictor - Map</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css"
+        integrity="sha256-sA+e2iwDxTWkQcgn/DuNWZo0/nkNJCQXmk6bF1h7t+g=" crossorigin="" />
+
+    <style>
+        body,
+        html {
+            margin: 0;
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        #map {
+            height: 400px;
+            width: 100%;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .instruction-text {
+            padding: 8px;
+            text-align: center;
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #ddd;
+            font-size: 14px;
+            color: #666;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="instruction-text">
+        Click anywhere on the map to predict plant species at that location
+    </div>
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"
+        integrity="sha256-oVn4VHKUZeLv/fsGXuuSfsxuWJ2+nC4PozCDWC9hspo=" crossorigin=""></script>
+
+    <script>
+        // Centered around Vancouver, 8 zoom
+        var map = L.map('map').setView([49.258, -123.17], 8);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 18,
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        var marker;
+
+        function sendCoordinates(lat, lng) {
+            var latInput = document.getElementById('lat_input');
+            var lngInput = document.getElementById('lng_input');
+
+            if (latInput && lngInput) {
+                latInput.value = lat;
+                lngInput.value = lng;
+
+                latInput.dispatchEvent(new Event('input', { bubbles: true }));
+                lngInput.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+        }
+
+        map.on('click', function (e) {
+            if (marker) {
+                map.removeLayer(marker);
+            }
+
+            marker = L.marker(e.latlng)
+                .addTo(map)
+                .bindPopup(`Predicting species at:<br>Lat: ${e.latlng.lat.toFixed(4)}<br>Lng: ${e.latlng.lng.toFixed(4)}`)
+                .openPopup();
+
+            sendCoordinates(e.latlng.lat, e.latlng.lng);
+        });
+
+        var bounds = L.latLngBounds([[40, -160], [70, -110]]);
+        map.setMaxBounds(bounds);
+    </script>
+</body>
+
+</html>
