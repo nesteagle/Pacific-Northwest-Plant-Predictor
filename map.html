@@ -18,7 +18,7 @@
         }
 
         #map {
-            height: 400px;
+            height: 60vh;
             width: 100%;
             border: 1px solid #ddd;
             border-radius: 4px;
@@ -80,6 +80,10 @@
 
             sendCoordinates(e.latlng.lat, e.latlng.lng);
         });
+
+        setTimeout(() => {
+            map.invalidateSize();
+        }, 200);
 
         var bounds = L.latLngBounds([[40, -160], [70, -110]]);
         map.setMaxBounds(bounds);
