@@ -8,7 +8,19 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<style>
+    .leaflet-popup-content,
+    .leaflet-popup-content-wrapper {
+        color: black !important;
+        background-color: white !important;
+        opacity: 1 !important;
+        font-weight: 600;
+    }
 
+    .leaflet-popup {
+        z-index: 10000 !important;
+    }
+</style>
 <script>
     var map = L.map('map').setView([49.258, -123.17], 8);
 
@@ -39,7 +51,7 @@
 
         marker = L.marker(e.latlng)
             .addTo(map)
-            .bindPopup(`Predicting species at:<br>Lat: ${e.latlng.lat.toFixed(4)}<br>Lng: ${e.latlng.lng.toFixed(4)}`)
+            .bindPopup(`Predicting species at:<br>Latitude: ${e.latlng.lat.toFixed(4)}<br>Longitude: ${e.latlng.lng.toFixed(4)}`)
             .openPopup();
 
         sendCoordinates(e.latlng.lat, e.latlng.lng);

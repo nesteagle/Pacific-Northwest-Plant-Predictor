@@ -8,6 +8,7 @@ import gradio as gr
 import pandas as pd
 import numpy as np
 from scipy.spatial import KDTree
+
 from datasets import load_dataset
 
 CACHE_FILE = "processed_occurrences.pkl"
@@ -179,7 +180,8 @@ with gr.Blocks() as demo:
         placeholder="Click on the map to get prediction here...",
     )
 
-    lat_input.change(fn=predict, inputs=[lat_input, lng_input], outputs=output)
-    lng_input.change(fn=predict, inputs=[lat_input, lng_input], outputs=output)
+    lat_input.input(fn=predict, inputs=[lat_input, lng_input], outputs=output)
+    lng_input.input(fn=predict, inputs=[lat_input, lng_input], outputs=output)
+
 
 demo.launch()

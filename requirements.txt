@@ -1,5 +1,5 @@
-ipykernel
 pandas
 numpy
 scipy
 datasets
+gradio
