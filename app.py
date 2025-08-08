@@ -1,17 +1,14 @@
 """Predicts likely plant species at given latitude and longitude coordinates and hosts a Gradio interface"""
 
-import os
 from collections import defaultdict
 from datetime import datetime
+from dataclasses import dataclass
 
 import gradio as gr
 import pandas as pd
 import numpy as np
 from scipy.spatial import KDTree
-
 from datasets import load_dataset
-
-CACHE_FILE = "processed_occurrences.pkl"
 
 USE_COLS = [
     "DecimalLatitude",
@@ -27,114 +24,107 @@ LON_COL = "DecimalLongitude"
 MIN_LAT, MAX_LAT = 40.0, 70
 MIN_LON, MAX_LON = -160.0, -110.0
 
-
-def process_dataset(dataset, usecols):
-    """Convert dataset text format to pandas DataFrame."""
-    lines = [line for line in dataset["text"] if line.strip()]
-    header = lines[0].split("\t")
-    data_lines = lines[1:]
-    rows = [line.split("\t") for line in data_lines]
-    df_full = pd.DataFrame(rows, columns=header)
-    cols_to_use = [col for col in usecols if col in df_full.columns]
-    df = df_full[cols_to_use].copy()
-    return df
+MIN_OCCURRENCES = 15
+YEARS_BACK = 40
 
 
 def get_bounded_df():
-    """Load and preprocess herbarium data."""
-    if os.path.exists(CACHE_FILE):
-        df = pd.read_pickle(CACHE_FILE)
-        print("Loaded cached processed data.")
-    else:
-        dataset = load_dataset(
-            "nesteagle/CPNWH",
-            data_files={"occurrences": "occurrences.txt"},
-            split="occurrences",
-        )
+    """Load and preprocess herbarium data; enforce dtypes and bounds."""
+    dataset = load_dataset(
+        "nesteagle/CPNWH",
+        data_files={"occurrences": "occurrences.txt"},
+        split="occurrences",
+    )
 
-        # process to pandas
-        df = process_dataset(dataset, USE_COLS)
+    lines = [line for line in dataset["text"] if line.strip()]
+    header = lines[0].split("\t")
+    rows = [ln.split("\t") for ln in lines[1:]]
+    df_full = pd.DataFrame(rows, columns=header)
+    df = df_full[[c for c in USE_COLS if c in df_full.columns]].copy()
 
-        df[LAT_COL] = pd.to_numeric(df[LAT_COL], errors="coerce")
-        df[LON_COL] = pd.to_numeric(df[LON_COL], errors="coerce")
-        df["ValidLatLng"] = df["ValidLatLng"].astype(str).str.lower().eq("true")
+    df[LAT_COL] = pd.to_numeric(df[LAT_COL], errors="coerce")
+    df[LON_COL] = pd.to_numeric(df[LON_COL], errors="coerce")
+    df["ValidLatLng"] = (
+        df["ValidLatLng"]
+        .astype(str)
+        .str.strip()
+        .str.lower()
+        .isin(["true", "t", "1", "yes", "y"])
+    )
+    df["YearCollected"] = pd.to_numeric(df["YearCollected"], errors="coerce")
 
-        # Filter on lat/lon bounds and drop rows with missing or invalid lat/lon
-        df = df[
-            (df["ValidLatLng"])
-            & (df[LAT_COL] >= MIN_LAT)
-            & (df[LAT_COL] <= MAX_LAT)
-            & (df[LON_COL] >= MIN_LON)
-            & (df[LON_COL] <= MAX_LON)
-        ].dropna(subset=[LAT_COL, LON_COL])
+    df = df[
+        (df["ValidLatLng"])
+        & (df[LAT_COL].between(MIN_LAT, MAX_LAT, inclusive="both"))
+        & (df[LON_COL].between(MIN_LON, MAX_LON, inclusive="both"))
+    ].dropna(subset=[LAT_COL, LON_COL])
 
-        # Save to cache file
-        df.to_pickle(CACHE_FILE)
-        print("Processed and cached data saved.")
+    print(f"Loaded & bounded rows: {len(df)}")
     return df
 
 
-df_bounded = get_bounded_df()
+@dataclass
+class SpeciesIndex:
+    coords: np.ndarray
+    labels: np.ndarray
+    tree: KDTree
 
-# filter for non-null ScientificName cols
-df_bounded = df_bounded[df_bounded["ScientificName"].notna()]
 
-# filter out rare species with less than 15 occurrences total
-species_counts = df_bounded["ScientificName"].value_counts()
-species_to_keep = species_counts[species_counts >= 15].index
+def build_index() -> SpeciesIndex | None:
+    """Load, filter, and build KDTree index. Returns None if no data."""
+    df_bounded = get_bounded_df()
 
-df_filtered = df_bounded[df_bounded["ScientificName"].isin(species_to_keep)]
+    df_bounded = df_bounded[df_bounded["ScientificName"].notna()]
+    species_counts = df_bounded["ScientificName"].value_counts()
+    species_to_keep = species_counts[species_counts >= MIN_OCCURRENCES].index
+    df_filtered = df_bounded[df_bounded["ScientificName"].isin(species_to_keep)]
 
-# get records within 40 years prev
-df_filtered = df_filtered[
-    df_filtered["YearCollected"] >= datetime.now().year - 40
-].copy()
+    cutoff = datetime.now().year - YEARS_BACK
+    df_recent = df_filtered[df_filtered["YearCollected"] >= cutoff]
+    if len(df_recent) > 0:
+        df_filtered = df_recent
 
-coords = df_filtered[["DecimalLatitude", "DecimalLongitude"]].values
-labels = df_filtered["ScientificName"].values
-tree = KDTree(coords)
+    coords = df_filtered[[LAT_COL, LON_COL]].to_numpy()
+    labels = df_filtered["ScientificName"].to_numpy()
 
-GRID_SIZE = 0.01  # in degrees latitude/longitude
+    if len(coords) == 0:
+        print("No records after filtering; index not built.")
+        return None
 
-df_filtered = df_filtered.copy()
-df_filtered.loc[:, "grid_x"] = (df_filtered["DecimalLongitude"] // GRID_SIZE).astype(
-    int
+    tree = KDTree(coords)
+    print(f"Index built: points={len(coords)}")
+    return SpeciesIndex(coords=coords, labels=labels, tree=tree)
+
+
+SPECIES_INDEX = build_index()
+INDEX_STATUS = (
+    f"Index built: {len(SPECIES_INDEX.coords)} points"
+    if SPECIES_INDEX is not None
+    else "Warning: No records after filtering; predictions will be unavailable."
 )
-df_filtered.loc[:, "grid_y"] = (df_filtered["DecimalLatitude"] // GRID_SIZE).astype(int)
-
-agg = (
-    df_filtered.groupby(["grid_x", "grid_y"])
-    .agg(
-        species_richness=("ScientificName", "nunique"),
-        dominant_species_count=("ScientificName", lambda x: x.value_counts().max()),
-    )
-    .reset_index()
-)
-
-df_with_grid = df_filtered.merge(agg, on=["grid_x", "grid_y"], how="left")
 
 
 # distance of 0.1deg -> roughly 7x11km
 def predict_plants(lat, lon, max_distance=0.05, top_k=20):
     """Predict plant species likelihood at given coordinates using spatial K-NN."""
-    indices = tree.query_ball_point([lat, lon], r=max_distance)
+    if SPECIES_INDEX is None:
+        return None
+
+    indices = SPECIES_INDEX.tree.query_ball_point([lat, lon], r=max_distance)
     if not indices:
         return None
 
-    neighbors = labels[indices]
-    neighbor_coords = coords[indices]
+    neighbors = SPECIES_INDEX.labels[indices]
+    neighbor_coords = SPECIES_INDEX.coords[indices]
 
-    # Compute Euclidean distance and inverse-distance weights
-    deltas = neighbor_coords - np.array([lat, lon])
+    deltas = neighbor_coords - np.array([lat, lon], dtype=float)
     distances = np.linalg.norm(deltas, axis=1)
     weights = 1 / (distances + 1e-6)
 
-    # collect weight by species
     species_weights = defaultdict(float)
     for species, weight in zip(neighbors, weights):
         species_weights[species] += weight
 
-    # sort top_k species by weight
     total_weight = sum(species_weights.values())
     if total_weight == 0:
         return None
@@ -149,6 +139,8 @@ def predict_plants(lat, lon, max_distance=0.05, top_k=20):
 
 def predict(lat, lon):
     """Main prediction interface"""
+    if lat is None or lon is None:
+        return "Invalid input. Please retry."
     predictions = predict_plants(lat=lat, lon=lon)
     return format_predictions(predictions=predictions)
 
@@ -156,27 +148,54 @@ def predict(lat, lon):
 def format_predictions(predictions):
     """Formats predictions for display"""
     if not predictions:
-        return "No plants found nearby."
+        return "No plants found nearby. Maybe try zooming in?"
     lines = []
     for species, prob in predictions:
         name = species if species.strip() else "(Unknown species)"
         lines.append(f"{name}: {prob:.2f}%")
     return "\n".join(lines)
 
+
+def predict_from_coord(text: str):
+    """Parse 'lat,lon' and run prediction."""
+    if not text or "," not in text:
+        return "Invalid input. Please retry."
+    try:
+        lat_s, lon_s = [p.strip() for p in text.split(",", 1)]
+        lat = float(lat_s)
+        lon = float(lon_s)
+    except Exception:
+        return "Invalid input. Please retry."
+    if not (MIN_LAT <= lat <= MAX_LAT and MIN_LON <= lon <= MAX_LON):
+        return f"Out of bounds. Try lat {MIN_LAT}–{MAX_LAT}, lon {MIN_LON}–{MAX_LON}."
+    return predict(lat, lon)
+
+
 with gr.Blocks() as demo:
+    gr.Markdown("Click anywhere on the map to predict plant species at that location")
+    gr.Markdown(INDEX_STATUS)
+
     leaflet_html = open("map.html").read()
     gr.HTML(leaflet_html)
+    gr.HTML("<style>#coord_input{display:none}</style>")
 
-    lat_input = gr.Number(interactive=True, elem_id="lat_input")
-    lng_input = gr.Number(interactive=True, elem_id="lng_input")
+    coord_input = gr.Textbox(
+        label="Coordinates",
+        elem_id="coord_input",
+        value="",
+        lines=1,
+        interactive=True,
+        visible=True,  # will be hidden by JS
+    )
 
     output = gr.Textbox(
         label="Prediction Output",
         placeholder="Click on the map to get prediction here...",
     )
 
-    lat_input.change(fn=predict, inputs=[lat_input, lng_input], outputs=output)
-    lng_input.change(fn=predict, inputs=[lat_input, lng_input], outputs=output)
+    coord_input.input(fn=predict_from_coord, inputs=coord_input, outputs=output)
 
+    js_code = open("assets/map_init.js", "r", encoding="utf-8").read()
+    demo.load(lambda: None, inputs=[], outputs=[], js=js_code)
 
 demo.launch()
