@@ -97,22 +97,39 @@ def build_index() -> SpeciesIndex | None:
 
 
 SPECIES_INDEX = build_index()
-INDEX_STATUS = (
-    f"Index built: {len(SPECIES_INDEX.coords)} points"
-    if SPECIES_INDEX is not None
-    else "Warning: No records after filtering; predictions will be unavailable."
-)
+
+
+def _neighbors_with_zoom(
+    tree: KDTree, point, r0: float, r_max: float, min_count: int, growth: float = 1.8
+):
+    """Grow the search radius until we find at least min_count neighbors or hit r_max."""
+    r = float(r0)
+    while r <= r_max:
+        idx = tree.query_ball_point(point, r)
+        if idx:
+            if len(idx) >= min_count or r >= r_max:
+                return idx, r
+        r *= growth
+    return [], r_max
 
 
 # distance of 0.1deg -> roughly 7x11km
-def predict_plants(lat, lon, max_distance=0.05, top_k=20):
+def predict_plants(
+    lat, lon, max_distance=0.05, top_k=25, min_neighbors=5, max_radius=1
+):
     """Predict plant species likelihood at given coordinates using spatial K-NN."""
     if SPECIES_INDEX is None:
-        return None
+        return None, 0
 
-    indices = SPECIES_INDEX.tree.query_ball_point([lat, lon], r=max_distance)
+    indices, r_used = _neighbors_with_zoom(
+        SPECIES_INDEX.tree,
+        [lat, lon],
+        r0=max_distance,
+        r_max=max_radius,
+        min_count=min_neighbors,
+    )
     if not indices:
-        return None
+        return None, r_used
 
     neighbors = SPECIES_INDEX.labels[indices]
     neighbor_coords = SPECIES_INDEX.coords[indices]
@@ -127,29 +144,32 @@ def predict_plants(lat, lon, max_distance=0.05, top_k=20):
 
     total_weight = sum(species_weights.values())
     if total_weight == 0:
-        return None
+        return None, r_used
 
     results = [
         (species_name, 100 * weight / total_weight)
         for species_name, weight in species_weights.items()
     ]
     results.sort(key=lambda x: x[1], reverse=True)
-    return results[:top_k]
+    return results[:top_k], r_used
 
 
 def predict(lat, lon):
     """Main prediction interface"""
     if lat is None or lon is None:
         return "Invalid input. Please retry."
-    predictions = predict_plants(lat=lat, lon=lon)
-    return format_predictions(predictions=predictions)
+    predictions, r_used = predict_plants(lat=lat, lon=lon)
+    return format_predictions(predictions=predictions, r_used=r_used, lat=lat)
 
 
-def format_predictions(predictions):
+def format_predictions(predictions, r_used, lat=None):
     """Formats predictions for display"""
+    LAT_TO_KM = 111  # approx km per degree latitude
     if not predictions:
-        return "No plants found nearby. Maybe try zooming in?"
-    lines = []
+        return "No plants found nearby."
+    lat_km = LAT_TO_KM * r_used
+    lon_km = LAT_TO_KM * np.cos(np.radians(lat)) * r_used  # since lon depends on lat
+    lines = [f"Approximate area searched: {lon_km*2:.1f} km x {lat_km*2:.1f} km"]
     for species, prob in predictions:
         name = species if species.strip() else "(Unknown species)"
         lines.append(f"{name}: {prob:.2f}%")
@@ -167,16 +187,16 @@ def predict_from_coord(text: str):
     except Exception:
         return "Invalid input. Please retry."
     if not (MIN_LAT <= lat <= MAX_LAT and MIN_LON <= lon <= MAX_LON):
-        return f"Out of bounds. Try lat {MIN_LAT}–{MAX_LAT}, lon {MIN_LON}–{MAX_LON}."
+        return f"Out of bounds. Please click inside the bounds."
     return predict(lat, lon)
 
 
 with gr.Blocks() as demo:
-    gr.Markdown("Click anywhere on the map to predict plant species at that location")
-    gr.Markdown(INDEX_STATUS)
+    gr.Markdown(
+        "Click anywhere on the map to generate an approximate estimate of plant species at that location. Results are based on K-NN on an academic dataset, which may contain inaccuracies."
+    )
 
-    leaflet_html = open("map.html").read()
-    gr.HTML(leaflet_html)
+    gr.HTML("<style>.gradio-container{max-width:100% !important}</style>")
     gr.HTML("<style>#coord_input{display:none}</style>")
 
     coord_input = gr.Textbox(
@@ -185,13 +205,20 @@ with gr.Blocks() as demo:
         value="",
         lines=1,
         interactive=True,
-        visible=True,  # will be hidden by JS
+        visible=True,
     )
 
-    output = gr.Textbox(
-        label="Prediction Output",
-        placeholder="Click on the map to get prediction here...",
-    )
+    with gr.Row(equal_height=True):
+        with gr.Column(scale=3, min_width=420):
+            leaflet_html = open("map.html", encoding="utf-8").read()
+            gr.HTML(leaflet_html)
+        with gr.Column(scale=2, min_width=320):
+            output = gr.Textbox(
+                label="Prediction Output",
+                placeholder="Click on the map to get prediction here...",
+                lines=25,
+                show_copy_button=True,
+            )
 
     coord_input.input(fn=predict_from_coord, inputs=coord_input, outputs=output)
 

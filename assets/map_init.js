@@ -57,8 +57,14 @@
             coordField.value = `${+e.latlng.lat},${+e.latlng.lng}`;
             coordField.dispatchEvent(new Event('input', { bubbles: true }));
         });
-
-        map.setMaxBounds(L.latLngBounds([[40, -160], [70, -110]]));
+        const STUDY_BOUNDS = L.latLngBounds([[40.0, -160.0], [70.0, -110.0]]);
+        L.rectangle(STUDY_BOUNDS, {
+            color: '#222',
+            weight: 1,
+            dashArray: '4 4',
+            fill: false
+        }).addTo(map);
+        map.setMaxBounds(STUDY_BOUNDS);
     })().catch(err => console.error('Map init failed:', err));
 
     return [];
